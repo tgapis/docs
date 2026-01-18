@@ -1,5 +1,8 @@
 name: Update Telegram API JSON
 
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -10,19 +13,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout tgapis/docs
+      # 1️⃣ Checkout tgapis/docs (this repo)
       - name: Checkout tgapis/docs
         uses: actions/checkout@v4
 
-      # 2️⃣ Clone tgapis/x (data branch)
+      # 2️⃣ Clone tgapis/x (data branch) – DATA SOURCE
       - name: Clone tgapis/x (data branch)
         run: |
           git clone --branch data --depth 1 https://github.com/tgapis/x tgapis-x
 
-      # 3️⃣ Clone tgapis/tgdocsapi (output repo)
+      # 3️⃣ Clone tgapis/tgdocsapi (output repo) – AUTHENTICATED
       - name: Clone tgapis/tgdocsapi (output)
         run: |
-          git clone https://github.com/tgapis/tgdocsapi output
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/tgapis/tgdocsapi output
 
       # 4️⃣ Setup Python
       - name: Setup Python
@@ -31,7 +34,6 @@ jobs:
           python-version: "3.11"
 
       # 5️⃣ Install dependencies
-      - name: Install dependencies
         run: |
           pip install beautifulsoup4 lxml
 
