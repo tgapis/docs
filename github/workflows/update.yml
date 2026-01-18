@@ -1,0 +1,93 @@
+name: Update Telegram API JSON
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout tgapis/docs
+      - name: Checkout tgapis/docs
+        uses: actions/checkout@v4
+
+      # 2️⃣ Clone tgapis/x (data branch)
+      - name: Clone tgapis/x (data branch)
+        run: |
+          git clone --branch data --depth 1 https://github.com/tgapis/x tgapis-x
+
+      # 3️⃣ Clone tgapis/tgdocsapi (output repo)
+      - name: Clone tgapis/tgdocsapi (output)
+        run: |
+          git clone https://github.com/tgapis/tgdocsapi output
+
+      # 4️⃣ Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 5️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install beautifulsoup4 lxml
+
+      # 6️⃣ Prepare input for tl.py
+      - name: Prepare Telegram HTML data
+        run: |
+          rm -rf docs/Telegram
+          mkdir -p docs/Telegram
+          cp -r tgapis-x/Telegram/* docs/Telegram/
+
+      # 7️⃣ Run tl.py
+      - name: Generate tlapi.json
+        run: |
+          cd docs
+          python tl.py
+          mv tlapi.json ../output/tlapi.json
+
+      # 8️⃣ Fetch botapi.json
+      - name: Fetch botapi.json
+        run: |
+          curl -L \
+          https://raw.githubusercontent.com/tgapis/x/data/botapi.json \
+          -o output/botapi.json
+
+      # 9️⃣ Safety check – ONLY two files allowed
+      - name: Safety check (only JSON files)
+        run: |
+          cd output
+          git status --porcelain | awk '{print $2}' | grep -vE '^(tlapi.json|botapi.json)$' && exit 1 || true
+
+      # 🔟 Commit & push (set output flag)
+      - name: Commit and push changes
+        id: commit
+        run: |
+          cd output
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add tlapi.json botapi.json
+
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> $GITHUB_OUTPUT
+            echo "No changes to push"
+          else
+            git commit -m "auto: update tlapi.json & botapi.json"
+            git push
+            echo "pushed=true" >> $GITHUB_OUTPUT
+          fi
+
+      # 🔔 Notify owner on Telegram (ONLY if pushed)
+      - name: Notify owner on Telegram
+        if: steps.commit.outputs.pushed == 'true'
+        run: |
+          MESSAGE="✅ *Telegram API JSON Updated*\n\n• tlapi.json\n• botapi.json\n\n⏱ $(date -u)"
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.OWNER_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="$MESSAGE"
