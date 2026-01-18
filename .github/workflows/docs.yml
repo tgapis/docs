@@ -13,19 +13,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout tgapis/docs
+      # 1️⃣ Checkout tgapis/docs (this repo)
       - name: Checkout tgapis/docs
         uses: actions/checkout@v4
 
-      # 2️⃣ Clone tgapis/x (data branch)
+      # 2️⃣ Clone tgapis/x (data branch) – DATA SOURCE
       - name: Clone tgapis/x (data branch)
         run: |
           git clone --branch data --depth 1 https://github.com/tgapis/x tgapis-x
 
-      # 3️⃣ Clone tgapis/tgdocsapi (output repo)
+      # 3️⃣ Clone tgapis/tgdocsapi (PRIVATE output repo) – via PAT
       - name: Clone tgapis/tgdocsapi (output)
         run: |
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/tgapis/tgdocsapi output
+          git clone https://x-access-token:${{ secrets.TGDOCS_PAT }}@github.com/tgapis/tgdocsapi output
 
       # 4️⃣ Setup Python
       - name: Setup Python
@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      # 5️⃣ Install dependencies ✅ FIXED
+      # 5️⃣ Install dependencies
       - name: Install dependencies
         run: |
           pip install beautifulsoup4 lxml
@@ -45,7 +45,7 @@ jobs:
           mkdir -p docs/Telegram
           cp -r tgapis-x/Telegram/* docs/Telegram/
 
-      # 7️⃣ Run tl.py
+      # 7️⃣ Run tl.py (inside tgapis/docs)
       - name: Generate tlapi.json
         run: |
           cd docs
@@ -65,7 +65,7 @@ jobs:
           cd output
           git status --porcelain | awk '{print $2}' | grep -vE '^(tlapi.json|botapi.json)$' && exit 1 || true
 
-      # 🔟 Commit & push
+      # 🔟 Commit & push changes
       - name: Commit and push changes
         id: commit
         run: |
@@ -84,7 +84,7 @@ jobs:
             echo "pushed=true" >> $GITHUB_OUTPUT
           fi
 
-      # 🔔 Notify owner on Telegram
+      # 🔔 Notify owner on Telegram (ONLY if pushed)
       - name: Notify owner on Telegram
         if: steps.commit.outputs.pushed == 'true'
         run: |
