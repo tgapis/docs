@@ -17,12 +17,18 @@ STATUS_BOTAPIDOCS="skipped"
 START_TIME="$(date -u)"
 
 symbol() {
-  [[ "$1" == "updated" ]] && printf "✓" || printf "✗"
+  case "$1" in
+    updated) printf "✓" ;;
+    skipped) printf "⏭" ;;
+    *)       printf "✗" ;;
+  esac
 }
 
 on_error() {
   EXIT_CODE=$?
   LINE_NO=$1
+
+  echo "✗ ERROR at line $LINE_NO (exit code $EXIT_CODE)"
 
   MESSAGE=$'✗ *Telegram API Update FAILED*\n\n'
   MESSAGE+=$'• Exit code: '"$EXIT_CODE"$'\n'
@@ -42,6 +48,8 @@ on_error() {
 trap 'on_error $LINENO' ERR
 
 echo "▶ Starting Telegram API update"
+echo "⏱ Started at $START_TIME"
+echo
 
 # Clone sources
 git clone --branch data --depth 1 https://github.com/tgapis/x tgapis-x
@@ -70,59 +78,79 @@ git config user.email "$GIT_EMAIL"
 
 git add tlapi.json botapi.json
 if git diff --cached --quiet; then
-  echo "ℹ tgdocsapi: no changes"
+  echo "⏭ tgdocsapi: no changes"
 else
   git commit -m "auto: update tlapi.json & botapi.json"
   git push
   STATUS_TGDOCSAPI="updated"
+  echo "✓ tgdocsapi: updated"
 fi
 cd ..
 
 # Fan-out
 if [[ "$STATUS_TGDOCSAPI" == "updated" ]]; then
+
   git clone https://x-access-token:${TGAPIS_PAT}@github.com/tgapis/botapi-webclient webclient
   cp output/botapi.json webclient/botapi.json
   cd webclient
+
   git config user.name "$GIT_USER"
   git config user.email "$GIT_EMAIL"
+
   git add botapi.json
   if git diff --cached --quiet; then
-    echo "ℹ botapi-webclient: no changes"
+    echo "⏭ botapi-webclient: no changes"
   else
     git commit -m "auto: update botapi.json"
     git push
     STATUS_WEBCLIENT="updated"
+    echo "✓ botapi-webclient: updated"
   fi
   cd ..
 
   git clone https://x-access-token:${TGAPIS_PAT}@github.com/tgapis/botapidocs botapidocs
   cp output/botapi.json botapidocs/botapi.json
   cd botapidocs
+
   git config user.name "$GIT_USER"
   git config user.email "$GIT_EMAIL"
+
   git add botapi.json
   if git diff --cached --quiet; then
-    echo "ℹ botapidocs: no changes"
+    echo "⏭ botapidocs: no changes"
   else
     git commit -m "auto: update botapi.json"
     git push
     STATUS_BOTAPIDOCS="updated"
+    echo "✓ botapidocs: updated"
   fi
   cd ..
 fi
 
-# Success notification
-MESSAGE=$'✓ *Telegram API Update Summary*\n\n'
-MESSAGE+=$'• tgdocsapi: '$(symbol "$STATUS_TGDOCSAPI")$'\n'
-MESSAGE+=$'• botapi-webclient: '$(symbol "$STATUS_WEBCLIENT")$'\n'
-MESSAGE+=$'• botapidocs: '$(symbol "$STATUS_BOTAPIDOCS")$'\n\n'
-MESSAGE+=$'⏱ Started: '"$START_TIME"$'\n'
-MESSAGE+=$'⏱ Finished: '"$(date -u)"$'\n'
+echo
+echo "▶ Summary (GitHub Actions)"
+echo "• tgdocsapi: $(symbol "$STATUS_TGDOCSAPI")"
+echo "• botapi-webclient: $(symbol "$STATUS_WEBCLIENT")"
+echo "• botapidocs: $(symbol "$STATUS_BOTAPIDOCS")"
+echo "⏱ Finished at $(date -u)"
+echo
 
-curl -s -X POST \
-  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-  -d chat_id="${OWNER_ID}" \
-  -d parse_mode="Markdown" \
-  -d text="$MESSAGE"
+# Send Telegram ONLY if something was updated
+if [[ "$STATUS_TGDOCSAPI" == "updated" || "$STATUS_WEBCLIENT" == "updated" || "$STATUS_BOTAPIDOCS" == "updated" ]]; then
+  MESSAGE=$'✓ *Telegram API Update Summary*\n\n'
+  MESSAGE+=$'• tgdocsapi: '$(symbol "$STATUS_TGDOCSAPI")$'\n'
+  MESSAGE+=$'• botapi-webclient: '$(symbol "$STATUS_WEBCLIENT")$'\n'
+  MESSAGE+=$'• botapidocs: '$(symbol "$STATUS_BOTAPIDOCS")$'\n\n'
+  MESSAGE+=$'⏱ Started: '"$START_TIME"$'\n'
+  MESSAGE+=$'⏱ Finished: '"$(date -u)"$'\n'
 
-echo "✓ Update completed successfully"
+  curl -s -X POST \
+    "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+    -d chat_id="${OWNER_ID}" \
+    -d parse_mode="Markdown" \
+    -d text="$MESSAGE"
+else
+  echo "ℹ No updates detected — Telegram notification skipped"
+fi
+
+echo "✓ Update completed"
